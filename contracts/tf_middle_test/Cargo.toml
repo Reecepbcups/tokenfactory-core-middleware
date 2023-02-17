@@ -51,7 +51,7 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 thiserror = "1.0"
 getrandom = { version = "0.2", features = ["js"] }
 
-token_factory_middlware = { path = "../tokenfactory_core" }
+tokenfactory_core = { path = "../tokenfactory_core" }
 
 [dev-dependencies]
 cw-multi-test = "0.16.1"

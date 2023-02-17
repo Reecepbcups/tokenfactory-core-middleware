@@ -41,7 +41,7 @@ pub fn instantiate(
     Ok(Response::new().add_attribute("method", "instantiate"))
 }
 
-use token_factory_middlware::msg::ExecuteMsg::Mint;
+use tokenfactory_core::msg::ExecuteMsg::Mint;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(

@@ -98,7 +98,7 @@ function upload_middlware {
     create_denom
 
     echo "Storing contract..."
-    UPLOAD=$($BINARY tx wasm store /token_factory_middlware.wasm $JUNOD_COMMAND_ARGS | jq -r '.txhash') && echo $UPLOAD
+    UPLOAD=$($BINARY tx wasm store /tokenfactory_core.wasm $JUNOD_COMMAND_ARGS | jq -r '.txhash') && echo $UPLOAD
     BASE_CODE_ID=$($BINARY q tx $UPLOAD --output json | jq -r '.logs[0].events[] | select(.type == "store_code").attributes[] | select(.key == "code_id").value') && echo "Code Id: $BASE_CODE_ID"
 
     # == INSTANTIATE ==
