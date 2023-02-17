@@ -1,0 +1,1 @@
+Use this contract to hold and mint your said denom from others
