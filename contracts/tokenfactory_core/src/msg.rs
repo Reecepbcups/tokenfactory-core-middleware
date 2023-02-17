@@ -1,7 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::Uint128;
 
-use crate::state::Config;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -11,8 +10,16 @@ pub struct InstantiateMsg {
     pub manager: Option<String>,
     pub allowed_mint_addresses: Vec<String>,
 
-    // TODO: allow multiple, and to add / remove later from contract manager
-    pub denom_name: String, // ex: factory/juno1xxx/test
+    // We can manage multiple denoms
+    pub denoms: Vec<Denom>, // ex: factory/juno1xxx/test
+}
+
+#[cw_serde]
+pub struct Denom {
+    // future: add an optional Name so its more human readable for contract authors
+    pub full_denom: String,
+    // this is only used in the execute_mint message to make it easier
+    pub amount: Option<Uint128>,
 }
 
 #[cw_serde]
@@ -20,21 +27,24 @@ pub enum ExecuteMsg {
     // Anyone
     Burn {},
 
-    // Add/Remove an address for who/what can Mint tokens
-    // Could also be a DAO or CW4 contract
-    AddWhitelistedMintAddress { address: String },
-    RemoveWhitelistedMintAddress { address: String },
+    // If an address is in the whitelist, we remove. if its not, we add it
+    // Could be a DAO, normal contract, or CW4
+    // Future: should we specify what name/denom an address can mint?
+    ModifyWhitelist { addresses: Vec<String> },
 
     // Mints actual tokens to an address (only whitelisted addresses can do this)
-    Mint { amount: Uint128, address: String },
+    Mint { address: String, denom: Vec<Denom> },
 
     // Only the manager can do this
-    ChangeTokenAdmin { address: String },
+    TransferAdmin { denom: String, new_address: String },
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    #[returns(Config)]
+    #[returns(crate::state::Config)]
     GetConfig {},
+
+    #[returns(Vec<Denom>)]
+    GetDenoms {},
 }

@@ -1,69 +1,55 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg,
-};
+use cosmwasm_std::{to_binary, DepsMut, Env, MessageInfo, Response, WasmMsg};
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg};
-
-// version info for migration info
-// const CONTRACT_NAME: &str = "crates.io:tokenfactory-test";
-// const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn instantiate(
-    _deps: DepsMut,
-    _env: Env,
-    _info: MessageInfo,
-    _msg: InstantiateMsg,
-) -> Result<Response, ContractError> {
-    // set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
-
-    // if !msg.denom_name.starts_with("factory/") {
-    //     return Err(ContractError::InvalidDenom {
-    //         denom: msg.denom_name,
-    //         message: "Denom must start with 'factory/'".to_string(),
-    //     });
-    // }
-
-    // let manager = deps
-    //     .api
-    //     .addr_validate(&msg.manager.unwrap_or_else(|| _info.sender.to_string()))?;
-
-    // let config = Config {
-    //     manager: manager.to_string(),
-    //     allowed_mint_addresses: msg.allowed_mint_addresses,
-    //     denom_name: msg.denom_name,
-    // };
-    // STATE.save(deps.storage, &config)?;
-
-    Ok(Response::new().add_attribute("method", "instantiate"))
-}
+use crate::state::{STATE, Config};
 
 use tokenfactory_core::msg::ExecuteMsg::Mint;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    msg: InstantiateMsg,
+) -> Result<Response, ContractError> {
+    let core_addr = deps.api.addr_validate(&msg.core_factory_address)?;
+
+    let config = Config {
+        core_address: core_addr.to_string(),
+    };
+    
+    STATE.save(deps.storage, &config)?;
+    
+    Ok(Response::new().add_attribute("method", "instantiate"))
+}
+
+#[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    env: Env,
-    info: MessageInfo,
+    _env: Env,
+    _info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        // put tf address in instatiate msg
-        ExecuteMsg::MintTokens { tf_address, address, amount } => {
-                    
-            let msg = WasmMsg::Execute {
-                contract_addr: tf_address.to_string(),
-                msg: to_binary(&Mint { amount, address })?,
-                funds: vec![],
+        ExecuteMsg::MintTokens { denoms, to_address } => {            
+            let core_tf_addr = STATE.load(deps.storage)?.core_address;
+
+            let payload = Mint {
+                address: to_address,
+                denom: denoms,
             };
 
             Ok(Response::new()
-                .add_message(msg)
-                .add_attribute("method", "execute_mint_tokens"))
-        },
+                .add_attribute("method", "execute_mint_tokens")
+                .add_message(WasmMsg::Execute {
+                    contract_addr: core_tf_addr,
+                    msg: to_binary(&payload)?,
+                    funds: vec![],
+                }))
+        }
     }
 }
 

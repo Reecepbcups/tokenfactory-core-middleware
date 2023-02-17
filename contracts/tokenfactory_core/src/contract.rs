@@ -1,13 +1,12 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{
-    to_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult, WasmMsg, Uint128,
-};
+use cosmwasm_std::{BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg, QueryMsg::GetConfig};
-use crate::state::{Config, STATE};
+use crate::helpers::{is_contract_manager, is_whitelisted};
+use crate::msg::{Denom, ExecuteMsg, InstantiateMsg};
+use crate::state::{Config, STATE, WHITELIST_ADDRESSES};
 
 use token_bindings::{TokenFactoryMsg, TokenMsg};
 
@@ -24,11 +23,13 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
-    if !msg.denom_name.starts_with("factory/") {
-        return Err(ContractError::InvalidDenom {
-            denom: msg.denom_name,
-            message: "Denom must start with 'factory/'".to_string(),
-        });
+    for d in msg.denoms.iter() {
+        if !d.full_denom.starts_with("factory/") {
+            return Err(ContractError::InvalidDenom {
+                denom: d.full_denom.clone(),
+                message: "Denom must start with 'factory/'".to_string(),
+            });
+        }
     }
 
     let manager = deps
@@ -38,7 +39,7 @@ pub fn instantiate(
     let config = Config {
         manager: manager.to_string(),
         allowed_mint_addresses: msg.allowed_mint_addresses,
-        denom_name: msg.denom_name,
+        denoms: msg.denoms,
     };
     STATE.save(deps.storage, &config)?;
 
@@ -53,26 +54,60 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response<TokenFactoryMsg>, ContractError> {
     match msg {
-        ExecuteMsg::Burn {} => todo!(),
-        ExecuteMsg::AddWhitelistedMintAddress { address } => todo!(),
-        ExecuteMsg::RemoveWhitelistedMintAddress { address } => todo!(),
-        ExecuteMsg::Mint { amount, address } => execute_mint(deps, info, amount, address),
-        ExecuteMsg::ChangeTokenAdmin { address } => execute_transfer_admin(deps, info, address),
+        // Permissionless
+        ExecuteMsg::Burn {} => execute_burn(deps, env, info),
+
+        // Contract whitelist only
+        ExecuteMsg::Mint { address, denom } => execute_mint(deps, info, address, denom),
+        ExecuteMsg::TransferAdmin { denom, new_address } => {
+            execute_transfer_admin(deps, info, denom, new_address)
+        }
+
+        // Contract manager only
+        ExecuteMsg::ModifyWhitelist { addresses } => {
+            let state = STATE.load(deps.storage)?;
+            is_contract_manager(state, info.sender)?;
+
+            // loop through all addresses, and see if they are in the whitelist. If so, remove them, if not, add them
+            for address in addresses.iter() {
+                let addr = deps.api.addr_validate(address)?;
+
+                if WHITELIST_ADDRESSES
+                    .may_load(deps.storage, addr.to_string())?
+                    .is_some()
+                {
+                    WHITELIST_ADDRESSES.remove(deps.storage, addr.to_string());
+                } else {
+                    WHITELIST_ADDRESSES.save(deps.storage, addr.to_string(), &true)?;
+                }
+            }
+
+            Ok(Response::new())
+        }
     }
 }
 
 pub fn execute_transfer_admin(
     deps: DepsMut,
     info: MessageInfo,
+    denom: String,
     new_addr: String,
 ) -> Result<Response<TokenFactoryMsg>, ContractError> {
     let state = STATE.load(deps.storage)?;
-    if info.sender != state.manager {
-        return Err(ContractError::Unauthorized {});
-    }
+    is_contract_manager(state.clone(), info.sender)?;
+
+    let denom =
+        state
+            .denoms
+            .iter()
+            .find(|d| d.full_denom == denom)
+            .ok_or(ContractError::InvalidDenom {
+                denom,
+                message: "Denom not found in state".to_string(),
+            })?;
 
     let msg = TokenMsg::ChangeAdmin {
-        denom: state.denom_name,
+        denom: denom.full_denom.to_string(),
         new_admin_address: new_addr.to_string(),
     };
 
@@ -85,23 +120,110 @@ pub fn execute_transfer_admin(
 pub fn execute_mint(
     deps: DepsMut,
     info: MessageInfo,
-    amount: Uint128,
     address: String,
+    denoms: Vec<Denom>,
 ) -> Result<Response<TokenFactoryMsg>, ContractError> {
-    let state = STATE.load(deps.storage)?;    
+    let state = STATE.load(deps.storage)?;
 
-    // ensure the sender is allowed too
-    if !state.allowed_mint_addresses.contains(&info.sender.to_string()) {
-        return Err(ContractError::Unauthorized {});
+    is_whitelisted(state.clone(), info.sender)?;
+
+    if denoms.is_empty() {
+        return Err(ContractError::InvalidDenom {
+            denom: "denoms".to_string(),
+            message: "denoms cannot be empty on mint".to_string(),
+        });
     }
 
-    let msg = TokenMsg::MintTokens { denom: state.denom_name, amount: amount, mint_to_address: address.to_string() };
+    for d in denoms.clone() {
+        // check if the denom is in the state, if not, we can not mint it to a user.
+        // find the full denom OR name if it is set
+        let tmp_denom = state
+            .denoms
+            .iter()
+            .find(|denom| denom.full_denom == d.full_denom)
+            .ok_or(ContractError::InvalidDenom {
+                denom: d.full_denom,
+                message: "Denom not found in state".to_string(),
+            })?;
+
+        // ensure denom has amount set, else we can not send
+        if tmp_denom.amount.is_none() {
+            return Err(ContractError::InvalidDenom {
+                denom: tmp_denom.full_denom.to_string(),
+                message: "Denom does not have amount set".to_string(),
+            });
+        }
+    }
+
+    // create the send messages
+    let msgs: Vec<TokenMsg> = denoms
+        .iter()
+        .map(|d| TokenMsg::MintTokens {
+            denom: d.full_denom.clone(),
+            amount: d.amount.unwrap(),
+            mint_to_address: address.to_string(),
+        })
+        .collect();
+
+    // get all full_denom & amounts as a string in the format [{full_denom: amount}, ], ex: [{uusd: 1000000}, {ujuno: 1000000}]
+    let output = denoms
+        .iter()
+        .map(|d| format!("{{{}: {}}}", d.full_denom, d.amount.unwrap()))
+        .collect::<Vec<String>>()
+        .join(", ");
 
     Ok(Response::new()
         .add_attribute("method", "execute_mint")
         .add_attribute("to_address", address)
-        .add_attribute("amount", amount.to_string())
-        .add_message(msg))
+        .add_attribute("denoms", output)
+        .add_messages(msgs))
+}
+
+pub fn execute_burn(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<Response<TokenFactoryMsg>, ContractError> {
+    // Anyone can burn funds since they have to send them in.
+    if info.funds.is_empty() {
+        return Err(ContractError::InvalidFunds {});
+    }
+
+    let state = STATE.load(deps.storage)?;
+
+    // the difference between the funds sent and the funds to send back
+    let factory_denoms: Vec<Coin> = info
+        .funds
+        .iter()
+        .filter(|coin| state.denoms.iter().any(|d| d.full_denom == coin.denom))
+        .cloned()
+        .collect();
+
+    let send_back = info
+        .funds
+        .iter()
+        .filter(|coin| !factory_denoms.contains(coin))
+        .cloned()
+        .collect();
+
+    let burn_msgs: Vec<TokenMsg> = factory_denoms
+        .iter()
+        .map(|coin| TokenMsg::BurnTokens {
+            denom: coin.denom.clone(),
+            amount: coin.amount,
+            burn_from_address: env.contract.address.to_string(),
+        })
+        .collect();
+
+    let bank_return_msg = BankMsg::Send {
+        to_address: info.sender.to_string(),
+        amount: send_back,
+    };
+
+    Ok(Response::new()
+        .add_attribute("method", "execute_burn")
+        .add_message(bank_return_msg)
+        .add_messages(burn_msgs))
 }
 
 // pub fn execute_redeem_balance(

@@ -1,5 +1,5 @@
 [package]
-name = "tf_middle_test"
+name = "tokenfactory_test"
 version = "0.1.0"
 authors = ["Reece <reecepbcups@gmail.com>"]
 edition = "2018"
@@ -49,10 +49,9 @@ cw2 = "1.0.0"
 schemars = "0.8"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 thiserror = "1.0"
-getrandom = { version = "0.2", features = ["js"] }
 
 tokenfactory_core = { path = "../tokenfactory_core" }
 
 [dev-dependencies]
 cw-multi-test = "0.16.1"
-token-bindings-test = { git = "https://github.com/CosmWasm/token-bindings" }
+# token-bindings-test = { git = "https://github.com/CosmWasm/token-bindings" }
