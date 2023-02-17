@@ -1,5 +1,5 @@
 use cosmwasm_schema::write_api;
-use tokenfactory_core::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use tf_example::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 
 fn main() {
     write_api! {

@@ -1,12 +1,15 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_binary, DepsMut, Env, MessageInfo, Response, WasmMsg};
+use cosmwasm_std::{to_binary, DepsMut, Env, MessageInfo, Response, WasmMsg, Deps, StdResult, Binary};
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg};
-use crate::state::{STATE, Config};
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::state::{Config, STATE};
 
-use tokenfactory_core::msg::ExecuteMsg::Mint;
+#[cfg(feature = "use-tf-example")]
+use self::{instantiate, execute, query};
+
+use tokenfactory_types::msg::ExecuteMsg::Mint as Mint;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
@@ -20,9 +23,9 @@ pub fn instantiate(
     let config = Config {
         core_address: core_addr.to_string(),
     };
-    
+
     STATE.save(deps.storage, &config)?;
-    
+
     Ok(Response::new().add_attribute("method", "instantiate"))
 }
 
@@ -34,24 +37,37 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::MintTokens { denoms, to_address } => {            
+        ExecuteMsg::MintTokens { denoms, to_address } => {
             let core_tf_addr = STATE.load(deps.storage)?.core_address;
 
             let payload = Mint {
                 address: to_address,
                 denom: denoms,
             };
+            let wasm_msg = WasmMsg::Execute {
+                contract_addr: core_tf_addr,
+                msg: to_binary(&payload)?,
+                funds: vec![],
+            };
 
             Ok(Response::new()
                 .add_attribute("method", "execute_mint_tokens")
-                .add_message(WasmMsg::Execute {
-                    contract_addr: core_tf_addr,
-                    msg: to_binary(&payload)?,
-                    funds: vec![],
-                }))
+                // .add_message(wasm_msg)
+            )
         }
     }
 }
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::GetConfig {} => {
+            let state = STATE.load(deps.storage)?;
+            to_binary(&state)
+        }
+    }
+}
+
 
 // pub fn execute_transfer_admin(
 //     deps: DepsMut,

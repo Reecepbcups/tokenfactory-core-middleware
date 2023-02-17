@@ -1,5 +1,6 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use tokenfactory_core::msg::Denom;
+
+pub use tokenfactory_types::msg::Denom as Denom;
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -12,10 +13,14 @@ pub enum ExecuteMsg {
     MintTokens {
         // core_factory_address: String, // handled in state.rs now
         denoms: Vec<Denom>,
+        // denoms: String,
         to_address: String,
     },
 }
 
 #[cw_serde]
 #[derive(QueryResponses)]
-pub enum QueryMsg {}
+pub enum QueryMsg {
+    #[returns(crate::state::Config)]
+    GetConfig {},
+}

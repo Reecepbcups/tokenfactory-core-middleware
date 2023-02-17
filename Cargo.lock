@@ -726,6 +726,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tf_example"
+version = "1.0.0"
+dependencies = [
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw-storage-plus",
+ "schemars",
+ "thiserror",
+ "tokenfactory-types",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -757,24 +770,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokenfactory_core"
-version = "0.1.0"
+name = "tokenfactory-types"
+version = "0.0.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
- "cosmwasm-storage",
- "cw-multi-test",
- "cw-storage-plus",
- "cw2",
  "schemars",
  "serde",
- "thiserror",
- "token-bindings",
 ]
 
 [[package]]
-name = "tokenfactory_test"
-version = "0.1.0"
+name = "tokenfactory_core"
+version = "0.0.1"
 dependencies = [
  "cosmwasm-schema",
  "cosmwasm-std",
@@ -786,7 +793,7 @@ dependencies = [
  "serde",
  "thiserror",
  "token-bindings",
- "tokenfactory_core",
+ "tokenfactory-types",
 ]
 
 [[package]]

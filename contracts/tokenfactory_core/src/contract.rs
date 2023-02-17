@@ -1,11 +1,13 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{BankMsg, Coin, DepsMut, Env, MessageInfo, Response, to_binary, StdResult, Binary, Deps};
 use cw2::set_contract_version;
+
+use tokenfactory_types::msg::Denom as Denom;
 
 use crate::error::ContractError;
 use crate::helpers::{is_contract_manager, is_whitelisted};
-use crate::msg::{Denom, ExecuteMsg, InstantiateMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Config, STATE, WHITELIST_ADDRESSES};
 
 use token_bindings::{TokenFactoryMsg, TokenMsg};
@@ -277,16 +279,12 @@ pub fn execute_burn(
 //         .add_message(bank_msg))
 // }
 
-// #[cfg_attr(not(feature = "library"), entry_point)]
-// pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-//     match msg {
-//         QueryMsg::GetConfig {} => {
-//             let state = STATE.load(deps.storage)?;
-//             to_binary(&GetConfig {
-//                 cw20_address: state.cw20_address.into_string(),
-//                 tf_denom: state.tf_denom,
-//                 mode: "balance".to_string(),
-//             })
-//         }
-//     }
-// }
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::GetConfig {} => {
+            let state = STATE.load(deps.storage)?;
+            to_binary(&state)
+        }
+    }
+}
