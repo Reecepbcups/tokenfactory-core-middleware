@@ -1,9 +1,9 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{BankMsg, Coin, DepsMut, Env, MessageInfo, Response, to_binary, StdResult, Binary, Deps};
+use cosmwasm_std::{
+    to_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+};
 use cw2::set_contract_version;
-
-use tokenfactory_types::msg::Denom as Denom;
 
 use crate::error::ContractError;
 use crate::helpers::{is_contract_manager, is_whitelisted};
@@ -26,9 +26,9 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     for d in msg.denoms.iter() {
-        if !d.full_denom.starts_with("factory/") {
+        if !d.starts_with("factory/") {
             return Err(ContractError::InvalidDenom {
-                denom: d.full_denom.clone(),
+                denom: d.clone(),
                 message: "Denom must start with 'factory/'".to_string(),
             });
         }
@@ -98,18 +98,15 @@ pub fn execute_transfer_admin(
     let state = STATE.load(deps.storage)?;
     is_contract_manager(state.clone(), info.sender)?;
 
-    let denom =
-        state
-            .denoms
-            .iter()
-            .find(|d| d.full_denom == denom)
-            .ok_or(ContractError::InvalidDenom {
-                denom,
-                message: "Denom not found in state".to_string(),
-            })?;
+    let denom = state.denoms.iter().find(|d| d.to_string() == denom).ok_or(
+        ContractError::InvalidDenom {
+            denom,
+            message: "Denom not found in state".to_string(),
+        },
+    )?;
 
     let msg = TokenMsg::ChangeAdmin {
-        denom: denom.full_denom.to_string(),
+        denom: denom.to_string(),
         new_admin_address: new_addr.to_string(),
     };
 
@@ -123,7 +120,7 @@ pub fn execute_mint(
     deps: DepsMut,
     info: MessageInfo,
     address: String,
-    denoms: Vec<Denom>,
+    denoms: Vec<Coin>,
 ) -> Result<Response<TokenFactoryMsg>, ContractError> {
     let state = STATE.load(deps.storage)?;
 
@@ -136,33 +133,13 @@ pub fn execute_mint(
         });
     }
 
-    for d in denoms.clone() {
-        // check if the denom is in the state, if not, we can not mint it to a user.
-        // find the full denom OR name if it is set
-        let tmp_denom = state
-            .denoms
-            .iter()
-            .find(|denom| denom.full_denom == d.full_denom)
-            .ok_or(ContractError::InvalidDenom {
-                denom: d.full_denom,
-                message: "Denom not found in state".to_string(),
-            })?;
-
-        // ensure denom has amount set, else we can not send
-        if tmp_denom.amount.is_none() {
-            return Err(ContractError::InvalidDenom {
-                denom: tmp_denom.full_denom.to_string(),
-                message: "Denom does not have amount set".to_string(),
-            });
-        }
-    }
-
     // create the send messages
     let msgs: Vec<TokenMsg> = denoms
         .iter()
+        .filter(|d| denoms.iter().any(|d2| d2.denom == d.denom))
         .map(|d| TokenMsg::MintTokens {
-            denom: d.full_denom.clone(),
-            amount: d.amount.unwrap(),
+            denom: d.denom.clone(),
+            amount: d.amount,
             mint_to_address: address.to_string(),
         })
         .collect();
@@ -170,7 +147,7 @@ pub fn execute_mint(
     // get all full_denom & amounts as a string in the format [{full_denom: amount}, ], ex: [{uusd: 1000000}, {ujuno: 1000000}]
     let output = denoms
         .iter()
-        .map(|d| format!("{{{}: {}}}", d.full_denom, d.amount.unwrap()))
+        .map(|d| format!("{{{}: {}}}", d.denom, d.amount))
         .collect::<Vec<String>>()
         .join(", ");
 
@@ -193,20 +170,11 @@ pub fn execute_burn(
 
     let state = STATE.load(deps.storage)?;
 
-    // the difference between the funds sent and the funds to send back
-    let factory_denoms: Vec<Coin> = info
+    let (factory_denoms, send_back): (Vec<Coin>, Vec<Coin>) = info
         .funds
         .iter()
-        .filter(|coin| state.denoms.iter().any(|d| d.full_denom == coin.denom))
         .cloned()
-        .collect();
-
-    let send_back = info
-        .funds
-        .iter()
-        .filter(|coin| !factory_denoms.contains(coin))
-        .cloned()
-        .collect();
+        .partition(|coin| state.denoms.iter().any(|d| d.to_string() == coin.denom));
 
     let burn_msgs: Vec<TokenMsg> = factory_denoms
         .iter()
@@ -227,57 +195,6 @@ pub fn execute_burn(
         .add_message(bank_return_msg)
         .add_messages(burn_msgs))
 }
-
-// pub fn execute_redeem_balance(
-//     deps: DepsMut,
-//     info: MessageInfo,
-//     env: Env,
-//     cw20_msg: Cw20ReceiveMsg,
-// ) -> Result<Response, ContractError> {
-//     let cw20_contract = info.sender.to_string();
-//     let state = STATE.load(deps.storage)?;
-
-//     if cw20_contract != state.cw20_address {
-//         return Err(ContractError::InvalidCW20Address {});
-//     }
-
-//     let contract_balance = deps.querier.query_all_balances(env.contract.address)?;
-//     let contract_balance = contract_balance
-//         .iter()
-//         .find(|c| c.denom == state.tf_denom)
-//         .unwrap();
-
-//     if contract_balance.amount < cw20_msg.amount {
-//         return Err(ContractError::OutOfFunds {
-//             request: cw20_msg.amount,
-//             amount: contract_balance.amount,
-//         });
-//     }
-
-//     // Send our token-factory balance to the sender of the CW20 tokens for the exchange
-//     let bank_msg = BankMsg::Send {
-//         to_address: cw20_msg.sender.clone(),
-//         amount: vec![Coin {
-//             denom: state.tf_denom,
-//             amount: cw20_msg.amount,
-//         }],
-//     };
-
-//     // Burn the CW20 since it is in our possession now
-//     let cw20_burn = cw20::Cw20ExecuteMsg::Burn {
-//         amount: cw20_msg.amount,
-//     };
-//     let cw20_burn_msg: WasmMsg = WasmMsg::Execute {
-//         contract_addr: cw20_contract,
-//         msg: to_binary(&cw20_burn)?,
-//         funds: vec![],
-//     };
-
-//     Ok(Response::new()
-//         .add_attribute("method", "redeem_balannce")
-//         .add_message(cw20_burn_msg)
-//         .add_message(bank_msg))
-// }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {

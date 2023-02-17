@@ -1,8 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
-pub use tokenfactory_types::msg::Denom as Denom;
-
-
 #[cw_serde]
 pub struct InstantiateMsg {
     // the manager of the contract is the one who can transfer the admin to another address
@@ -12,7 +9,7 @@ pub struct InstantiateMsg {
     pub allowed_mint_addresses: Vec<String>,
 
     // We can manage multiple denoms
-    pub denoms: Vec<Denom>, // ex: factory/juno1xxx/test
+    pub denoms: Vec<String>, // ex: factory/juno1xxx/test
 }
 
 pub use tokenfactory_types::msg::ExecuteMsg;
@@ -22,7 +19,6 @@ pub use tokenfactory_types::msg::ExecuteMsg;
 pub enum QueryMsg {
     #[returns(crate::state::Config)]
     GetConfig {},
-
     // #[returns(Vec<Denom>)]
     // GetDenoms {},
 }

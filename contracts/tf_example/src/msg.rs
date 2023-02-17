@@ -1,18 +1,19 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
-pub use tokenfactory_types::msg::Denom as Denom;
+use cosmwasm_std::Coin;
 
 #[cw_serde]
 pub struct InstantiateMsg {
     // Assuming we handle all the denoms in 1 contract, we put that here.
-    pub core_factory_address: String,
+    pub core_factory_address: Option<String>,
 }
 
 #[cw_serde]
 pub enum ExecuteMsg {
     MintTokens {
-        // core_factory_address: String, // handled in state.rs now
-        denoms: Vec<Denom>,
+        core_factory_address: Option<String>, // handled in state.rs now
+
+        denoms: Vec<Coin>,
         // denoms: String,
         to_address: String,
     },

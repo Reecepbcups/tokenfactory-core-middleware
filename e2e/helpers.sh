@@ -66,3 +66,27 @@ function send_cw20_to_listing {
 
     wasm_cmd $CW20_CONTRACT_ADDR "$SEND_TOKEN_JSON" "" show_log
 }
+
+# ===============
+# === ASSERTS ===
+# ===============
+FINAL_STATUS_CODE=0
+
+function ASSERT_EQUAL {
+    # For logs, put in quotes. 
+    # If $1 is from JQ, ensure its -r and don't put in quotes
+    if [ "$1" != "$2" ]; then        
+        echo "ERROR: $1 != $2" 1>&2
+        FINAL_STATUS_CODE=1 
+    else
+        echo "SUCCESS"
+    fi
+}
+function ASSERT_CONTAINS {
+    if [[ "$1" != *"$2"* ]]; then
+        echo "ERROR: $1 does not contain $2" 1>&2        
+        FINAL_STATUS_CODE=1 
+    else
+        echo "SUCCESS"
+    fi
+}

@@ -80,30 +80,29 @@ function create_denom {
 # ========================
 # === Contract Uploads ===
 # ========================
-function upload_testing_contract {    
+function upload_testing_contract {   
     echo "Storing contract..."
-    UPLOAD=$($BINARY tx wasm store /tf_middle_test.wasm $JUNOD_COMMAND_ARGS | jq -r '.txhash') && echo $UPLOAD
+    UPLOAD=$($BINARY tx wasm store /tf_example.wasm $JUNOD_COMMAND_ARGS | jq -r '.txhash') && echo $UPLOAD
     BASE_CODE_ID=$($BINARY q tx $UPLOAD --output json | jq -r '.logs[0].events[] | select(.type == "store_code").attributes[] | select(.key == "code_id").value') && echo "Code Id: $BASE_CODE_ID"
 
     # == INSTANTIATE ==
-    
-    # PAYLOAD=$(printf '{"allowed_mint_addresses":["%s"],"denom_name":"%s"}' $KEY_ADDR $FULL_DENOM) && echo $PAYLOAD
-    TX_HASH=$($BINARY tx wasm instantiate "$BASE_CODE_ID" "{}" --label "tf_test" $JUNOD_COMMAND_ARGS --admin "$KEY_ADDR" | jq -r '.txhash') && echo $TX_HASH
+    # PAYLOAD=$(printf '{"core_factory_address":"%s"}' $TF_CONTRACT) && echo $PAYLOAD
+    PAYLOAD=$(printf '{}' $TF_CONTRACT) && echo $PAYLOAD
+    TX_HASH=$($BINARY tx wasm instantiate "$BASE_CODE_ID" "$PAYLOAD" --label "tf_test" $JUNOD_COMMAND_ARGS --admin "$KEY_ADDR" | jq -r '.txhash') && echo $TX_HASH
 
 
     export TEST_CONTRACT=$($BINARY query tx $TX_HASH --output json | jq -r '.logs[0].events[0].attributes[0].value') && echo "TEST_CONTRACT: $TEST_CONTRACT"
 }
 
 function upload_middlware {
-    create_denom
-
     echo "Storing contract..."
+    create_denom
     UPLOAD=$($BINARY tx wasm store /tokenfactory_core.wasm $JUNOD_COMMAND_ARGS | jq -r '.txhash') && echo $UPLOAD
     BASE_CODE_ID=$($BINARY q tx $UPLOAD --output json | jq -r '.logs[0].events[] | select(.type == "store_code").attributes[] | select(.key == "code_id").value') && echo "Code Id: $BASE_CODE_ID"
 
     # == INSTANTIATE ==
     
-    PAYLOAD=$(printf '{"allowed_mint_addresses":["%s"],"denom_name":"%s"}' $TEST_CONTRACT $FULL_DENOM) && echo $PAYLOAD
+    PAYLOAD=$(printf '{"allowed_mint_addresses":["%s"],"denoms":["%s"]}' $TEST_CONTRACT $FULL_DENOM) && echo $PAYLOAD
     TX_HASH=$($BINARY tx wasm instantiate "$BASE_CODE_ID" "$PAYLOAD" --label "tf-middlware" $JUNOD_COMMAND_ARGS --admin "$KEY_ADDR" | jq -r '.txhash') && echo $TX_HASH
 
 
@@ -111,33 +110,9 @@ function upload_middlware {
     
     # transfer admin to the contract from the user
     $BINARY tx tokenfactory change-admin $FULL_DENOM $TF_CONTRACT $JUNOD_COMMAND_ARGS
-
     $BINARY q tokenfactory denom-authority-metadata $FULL_DENOM # admin is the TF_CONTRACT
 }
 
-# ===============
-# === ASSERTS ===
-# ===============
-FINAL_STATUS_CODE=0
-
-function ASSERT_EQUAL {
-    # For logs, put in quotes. 
-    # If $1 is from JQ, ensure its -r and don't put in quotes
-    if [ "$1" != "$2" ]; then        
-        echo "ERROR: $1 != $2" 1>&2
-        FINAL_STATUS_CODE=1 
-    else
-        echo "SUCCESS"
-    fi
-}
-function ASSERT_CONTAINS {
-    if [[ "$1" != *"$2"* ]]; then
-        echo "ERROR: $1 does not contain $2" 1>&2        
-        FINAL_STATUS_CODE=1 
-    else
-        echo "SUCCESS"
-    fi
-}
 
 function add_accounts {
     # provision juno default user i.e. juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl
@@ -189,36 +164,38 @@ upload_middlware # TF_CONTRACT=juno1
 
 # start
 # MINT SOME TOKENS from the 2nd contract through middleware
-PAYLOAD=$(printf '{"mint_tokens":{"tf_address":"%s","address":"%s","amount":"1"}}' $TF_CONTRACT $KEY_ADDR) && echo $PAYLOAD
+PAYLOAD=$(printf '{"mint_tokens":{"core_factory_address":"%s","to_address":"%s","denoms":[{"denom":"%s","amount":"2"}]}}' $TF_CONTRACT $KEY_ADDR $FULL_DENOM) && echo $PAYLOAD
 wasm_cmd $TEST_CONTRACT "$PAYLOAD" "" show_log
-
-# then check $KEY_ADDR bal
 $BINARY q bank balances $KEY_ADDR --output json
+
+
+
+
 
 
 
 wasm_cmd $TF_CONTRACT '{"change_token_admin":{"address":"juno16g2rahf5846rxzp3fwlswy08fz8ccuwk03k57y"}}' "" show_log
 addrs=$(query_contract $TF_CONTRACT '{"info":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl"}}' | jq -r '.data') && echo $addrs
 
-# claim
-wasm_cmd $TF_CONTRACT '{"claim":{}}' "" show_log
+# # claim
+# wasm_cmd $TF_CONTRACT '{"claim":{}}' "" show_log
 
-# admin add funds
-wasm_cmd $TF_CONTRACT '{"add_funds":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl","amount":"50000000000000000000"}}' "" show_log
-
-
-# addrs=$(query_contract $TF_CONTRACT '{"upgrades":{}}' | jq -r '.data') && echo $addrs
-
-addrs=$(query_contract $TF_CONTRACT '{"points_per_block":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl"}}' | jq -r '.data') && echo $addrs
-
-wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"crops","num_of_times":150}}' "" show_log
+# # admin add funds
+# wasm_cmd $TF_CONTRACT '{"add_funds":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl","amount":"50000000000000000000"}}' "" show_log
 
 
-wasm_cmd $TF_CONTRACT '{"unlock":{"name":"workers"}}' "" show_log
-wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"workers","num_of_times":86}}' "" show_log
+# # addrs=$(query_contract $TF_CONTRACT '{"upgrades":{}}' | jq -r '.data') && echo $addrs
 
-wasm_cmd $TF_CONTRACT '{"unlock":{"name":"animals"}}' "" show_log
-wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"animals","num_of_times":10}}' "" show_log
+# addrs=$(query_contract $TF_CONTRACT '{"points_per_block":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl"}}' | jq -r '.data') && echo $addrs
+
+# wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"crops","num_of_times":150}}' "" show_log
+
+
+# wasm_cmd $TF_CONTRACT '{"unlock":{"name":"workers"}}' "" show_log
+# wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"workers","num_of_times":86}}' "" show_log
+
+# wasm_cmd $TF_CONTRACT '{"unlock":{"name":"animals"}}' "" show_log
+# wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"animals","num_of_times":10}}' "" show_log
 
 
 # OLD
