@@ -84,7 +84,7 @@ pub fn execute(
                 Ok(state)
             })?;
 
-            Ok(Response::new())
+            Ok(Response::new().add_attribute("method", "add_whitelist"))
         }
         ExecuteMsg::RemoveWhitelist { addresses } => {
             let state = STATE.load(deps.storage)?;
@@ -99,7 +99,41 @@ pub fn execute(
                 state.allowed_mint_addresses = updated;
                 Ok(state)
             })?;
-            Ok(Response::new())
+            Ok(Response::new().add_attribute("method", "remove_whitelist"))
+        }
+
+        ExecuteMsg::AddDenom { denoms } => {
+            let state = STATE.load(deps.storage)?;
+            is_contract_manager(state.clone(), info.sender)?;
+
+            let mut updated_denoms = state.denoms.clone();
+            for new in denoms {
+                if !updated_denoms.contains(&new) {
+                    updated_denoms.push(new);
+                }
+            }
+
+            STATE.update(deps.storage, |mut state| -> StdResult<_> {
+                state.denoms = updated_denoms;
+                Ok(state)
+            })?;
+
+            Ok(Response::new().add_attribute("method", "add_denom"))
+        }
+        ExecuteMsg::RemoveDenom { denoms } => {
+            let state = STATE.load(deps.storage)?;
+            is_contract_manager(state.clone(), info.sender)?;
+
+            let mut updated_denoms = state.denoms.clone();
+            for remove in denoms {
+                updated_denoms.retain(|a| a != &remove);
+            }
+
+            STATE.update(deps.storage, |mut state| -> StdResult<_> {
+                state.denoms = updated_denoms;
+                Ok(state)
+            })?;
+            Ok(Response::new().add_attribute("method", "remove_denom"))
         }
     }
 }
@@ -119,6 +153,19 @@ pub fn execute_transfer_admin(
             message: "Denom not found in state".to_string(),
         },
     )?;
+
+    // remove denom from state
+    let updated_state: Vec<String> = state
+        .denoms
+        .iter()
+        .filter(|d| d.to_string() != denom.to_string())
+        .map(|d| d.to_string())
+        .collect();
+
+    STATE.update(deps.storage, |mut state| -> StdResult<_> {
+        state.denoms = updated_state;
+        Ok(state)
+    })?;
 
     let msg = TokenMsg::ChangeAdmin {
         denom: denom.to_string(),

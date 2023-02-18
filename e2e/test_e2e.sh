@@ -44,6 +44,12 @@ function upload_testing_contract {
     export TEST_CONTRACT=$($BINARY query tx $TX_HASH --output json | jq -r '.logs[0].events[0].attributes[0].value') && echo "TEST_CONTRACT: $TEST_CONTRACT"
 }
 
+function transfer_denom_to_contract {
+    # transfer admin to the contract from the user
+    $BINARY tx tokenfactory change-admin $FULL_DENOM $TF_CONTRACT $JUNOD_COMMAND_ARGS
+    $BINARY q tokenfactory denom-authority-metadata $FULL_DENOM # admin is the TF_CONTRACT
+}
+
 function upload_tokenfactory_core {
     echo "Storing contract..."
     create_denom
@@ -58,9 +64,7 @@ function upload_tokenfactory_core {
 
     export TF_CONTRACT=$($BINARY query tx $TX_HASH --output json | jq -r '.logs[0].events[0].attributes[0].value') && echo "TF_CONTRACT: $TF_CONTRACT"
     
-    # transfer admin to the contract from the user
-    $BINARY tx tokenfactory change-admin $FULL_DENOM $TF_CONTRACT $JUNOD_COMMAND_ARGS
-    $BINARY q tokenfactory denom-authority-metadata $FULL_DENOM # admin is the TF_CONTRACT
+    transfer_denom_to_contract
 }
 
 # === COPY ALL ABOVE TO SET ENVIROMENT UP LOCALLY ====
@@ -85,10 +89,15 @@ upload_tokenfactory_core # TF_CONTRACT=juno1
 
 
 # == INITIAL TEST ==
-
+query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data'
+# add denom
+create_denom && transfer_denom_to_contract
+PAYLOAD=$(printf '{"add_denom":{"denoms":["%s"]}}' $FULL_DENOM) && echo $PAYLOAD
+wasm_cmd $TF_CONTRACT "$PAYLOAD" "" show_log
+query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data.denoms'
 
 # MINTS TOKENS FROM THE CORE CONTRACT (TF_CONTRACT) VIA THE TEST CONTRACT (TEST_CONTRACT)
-PAYLOAD=$(printf '{"mint_tokens":{"core_factory_address":"%s","to_address":"%s","denoms":[{"denom":"%s","amount":"2"}]}}' $TF_CONTRACT $KEY_ADDR $FULL_DENOM) && echo $PAYLOAD
+PAYLOAD=$(printf '{"mint_tokens":{"core_factory_address":"%s","to_address":"%s","denoms":[{"denom":"%s","amount":"1"}]}}' $TF_CONTRACT $KEY_ADDR $FULL_DENOM) && echo $PAYLOAD
 wasm_cmd $TEST_CONTRACT "$PAYLOAD" "" show_log
 $BINARY q bank balances $KEY_ADDR --output json
 
@@ -96,46 +105,20 @@ $BINARY q bank balances $KEY_ADDR --output json
 
 
 # UPDATE WHITELIST ON MAIN CORE (if not in, adds. If already in, removes via the same message)
+# in production, this would be another contract / a DAO
 PAYLOAD=$(printf '{"add_whitelist":{"addresses":["%s"]}}' $KEY_ADDR) && echo $PAYLOAD
 wasm_cmd $TF_CONTRACT "$PAYLOAD" "" show_log
-query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data'
+query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data.allowed_mint_addresses'
 # ensure this address can now mint tokens through the contract
 
 PAYLOAD=$(printf '{"remove_whitelist":{"addresses":["%s"]}}' $KEY_ADDR) && echo $PAYLOAD
 wasm_cmd $TF_CONTRACT "$PAYLOAD" "" show_log
-query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data'
+query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data.allowed_mint_addresses'
 
 
 
-
-
-wasm_cmd $TF_CONTRACT '{"change_token_admin":{"address":"juno16g2rahf5846rxzp3fwlswy08fz8ccuwk03k57y"}}' "" show_log
-addrs=$(query_contract $TF_CONTRACT '{"info":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl"}}' | jq -r '.data') && echo $addrs
-
-# # claim
-# wasm_cmd $TF_CONTRACT '{"claim":{}}' "" show_log
-
-# # admin add funds
-# wasm_cmd $TF_CONTRACT '{"add_funds":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl","amount":"50000000000000000000"}}' "" show_log
-
-
-# # addrs=$(query_contract $TF_CONTRACT '{"upgrades":{}}' | jq -r '.data') && echo $addrs
-
-# addrs=$(query_contract $TF_CONTRACT '{"points_per_block":{"address":"juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl"}}' | jq -r '.data') && echo $addrs
-
-# wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"crops","num_of_times":150}}' "" show_log
-
-
-# wasm_cmd $TF_CONTRACT '{"unlock":{"name":"workers"}}' "" show_log
-# wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"workers","num_of_times":86}}' "" show_log
-
-# wasm_cmd $TF_CONTRACT '{"unlock":{"name":"animals"}}' "" show_log
-# wasm_cmd $TF_CONTRACT '{"upgrade":{"name":"animals","num_of_times":10}}' "" show_log
-
-
-# OLD
-# submit price (so $1 is 1_000_000. Then when we query, we just / 1_000_000 = 1)
-# only the addresses in 'addresses' can submit prices. 
-# wasm_cmd $TF_CONTRACT '{"submit":{"data":[{"id":"JUNO","value":1000000}]}}' "" show_log
-# wasm_cmd $TF_CONTRACT '{"submit":{"data":[{"id":"JUNO","value":1001000}]}}' "" show_log "$TX_FLAGS --keyring-backend test --from other-user"
-# wasm_cmd $TF_CONTRACT '{"submit":{"data":[{"id":"JUNO","value":1004000}]}}' "" show_log "$TX_FLAGS --keyring-backend test --from user3"
+# == TRANSFER ADMIN OF DENOM ==
+# when done, we remove the denom from the denoms state as well.
+PAYLOAD=$(printf '{"transfer_admin":{"denom":"%s","new_address":"juno16g2rahf5846rxzp3fwlswy08fz8ccuwk03k57y"}}' $FULL_DENOM) && echo $PAYLOAD
+wasm_cmd $TF_CONTRACT "$PAYLOAD" "" show_log
+addrs=$(query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data.denoms') && echo $addrs
