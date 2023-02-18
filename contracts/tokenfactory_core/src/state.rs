@@ -1,5 +1,5 @@
 use cosmwasm_schema::cw_serde;
-use cw_storage_plus::{Item, Map};
+use cw_storage_plus::Item;
 
 #[cw_serde]
 pub struct Config {
@@ -9,5 +9,3 @@ pub struct Config {
 }
 
 pub const STATE: Item<Config> = Item::new("config");
-
-pub const WHITELIST_ADDRESSES: Map<String, bool> = Map::new("whitelist_addresses");

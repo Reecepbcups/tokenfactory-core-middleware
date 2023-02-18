@@ -735,7 +735,7 @@ dependencies = [
  "cw-storage-plus",
  "schemars",
  "thiserror",
- "tokenfactory-types 0.0.1 (git+https://github.com/Reecepbcups/tokenfactory-core-contract)",
+ "tokenfactory-types",
 ]
 
 [[package]]
@@ -780,17 +780,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokenfactory-types"
-version = "0.0.1"
-source = "git+https://github.com/Reecepbcups/tokenfactory-core-contract#8bf75c04528670b4326c5d221a79b340d667d776"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std",
- "schemars",
- "serde",
-]
-
-[[package]]
 name = "tokenfactory_core"
 version = "0.0.1"
 dependencies = [
@@ -804,7 +793,7 @@ dependencies = [
  "serde",
  "thiserror",
  "token-bindings",
- "tokenfactory-types 0.0.1",
+ "tokenfactory-types",
 ]
 
 [[package]]

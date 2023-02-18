@@ -8,12 +8,12 @@ use cw2::set_contract_version;
 use crate::error::ContractError;
 use crate::helpers::{is_contract_manager, is_whitelisted};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, STATE, WHITELIST_ADDRESSES};
+use crate::state::{Config, STATE};
 
 use token_bindings::{TokenFactoryMsg, TokenMsg};
 
 // version info for migration info
-const CONTRACT_NAME: &str = "crates.io:tokenfactory-middleware";
+const CONTRACT_NAME: &str = "crates.io:tokenfactory-core";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -66,24 +66,39 @@ pub fn execute(
         }
 
         // Contract manager only
-        ExecuteMsg::ModifyWhitelist { addresses } => {
+        // Merge these into a modify whitelist
+        ExecuteMsg::AddWhitelist { addresses } => {
             let state = STATE.load(deps.storage)?;
-            is_contract_manager(state, info.sender)?;
+            is_contract_manager(state.clone(), info.sender)?;
 
-            // loop through all addresses, and see if they are in the whitelist. If so, remove them, if not, add them
-            for address in addresses.iter() {
-                let addr = deps.api.addr_validate(address)?;
-
-                if WHITELIST_ADDRESSES
-                    .may_load(deps.storage, addr.to_string())?
-                    .is_some()
-                {
-                    WHITELIST_ADDRESSES.remove(deps.storage, addr.to_string());
-                } else {
-                    WHITELIST_ADDRESSES.save(deps.storage, addr.to_string(), &true)?;
+            // add addresses if it is not in state.allowed_mint_addresses
+            let mut updated = state.allowed_mint_addresses.clone();
+            for new in addresses {
+                if !updated.contains(&new) {
+                    updated.push(new);
                 }
             }
 
+            STATE.update(deps.storage, |mut state| -> StdResult<_> {
+                state.allowed_mint_addresses = updated;
+                Ok(state)
+            })?;
+
+            Ok(Response::new())
+        }
+        ExecuteMsg::RemoveWhitelist { addresses } => {
+            let state = STATE.load(deps.storage)?;
+            is_contract_manager(state.clone(), info.sender)?;
+
+            let mut updated = state.allowed_mint_addresses.clone();
+            for remove in addresses {
+                updated.retain(|a| a != &remove);
+            }
+
+            STATE.update(deps.storage, |mut state| -> StdResult<_> {
+                state.allowed_mint_addresses = updated;
+                Ok(state)
+            })?;
             Ok(Response::new())
         }
     }

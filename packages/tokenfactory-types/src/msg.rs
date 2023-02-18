@@ -7,10 +7,10 @@ pub enum ExecuteMsg {
     // Anyone
     Burn {},
 
-    // If an address is in the whitelist, we remove. if its not, we add it
     // Could be a DAO, normal contract, or CW4
     // Future: should we specify what name/denom an address can mint?
-    ModifyWhitelist { addresses: Vec<String> },
+    AddWhitelist { addresses: Vec<String> },
+    RemoveWhitelist { addresses: Vec<String> },
 
     // Mints actual tokens to an address (only whitelisted addresses can do this)
     Mint { address: String, denom: Vec<Coin> },

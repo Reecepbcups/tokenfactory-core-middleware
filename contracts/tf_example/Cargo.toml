@@ -45,15 +45,8 @@ cosmwasm-std = "1.2.1"
 cosmwasm-storage = "1.2.1"
 cw-storage-plus = "1.0.1"
 schemars = "0.8.11"
-# serde = { version = "1.0", default-features = false, features = ["derive"] }
 thiserror = "1.0"
-# token-bindings = { git = "https://github.com/CosmWasm/token-bindings" }
 
-# tokenfactory_core = { path = "../tokenfactory_core" }
-
-# tokenfactory-types = { path = "../../packages/tokenfactory-types" }
-tokenfactory-types = { git = "https://github.com/Reecepbcups/tokenfactory-core-contract" }
-
-# [dev-dependencies]
-# cw-multi-test = "0.16.1"
-# token-bindings-test = { git = "https://github.com/CosmWasm/token-bindings" }
+tokenfactory-types = { path = "../../packages/tokenfactory-types" }
+# for your contract, use the following:
+# tokenfactory-types = { git = "https://github.com/Reecepbcups/tokenfactory-core-contract" }

@@ -20,56 +20,6 @@ export JUNOD_COMMAND_ARGS="$TX_FLAGS --from test-user"
 export KEY_ADDR="juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl"
 
 
-# ===================
-# === Docker Init ===
-# ===================
-function stop_docker {
-    docker kill $CONTAINER_NAME
-    docker rm $CONTAINER_NAME
-    docker volume rm --force junod_data
-}
-
-function start_docker {
-    IMAGE_TAG=${2:-"13.0.0-beta"}
-    BLOCK_GAS_LIMIT=${GAS_LIMIT:-10000000} # mirrors mainnet
-
-    echo "Building $IMAGE_TAG"
-    echo "Configured Block Gas Limit: $BLOCK_GAS_LIMIT"
-
-    stop_docker    
-
-    # run junod docker
-    docker run --rm -d --name $CONTAINER_NAME \
-        -e STAKE_TOKEN=$DENOM \
-        -e GAS_LIMIT="$GAS_LIMIT" \
-        -e UNSAFE_CORS=true \
-        -e TIMEOUT_COMMIT="500ms" \
-        -p 1317:1317 -p 26656:26656 -p 26657:26657 \
-        --mount type=volume,source=junod_data,target=/root \
-        ghcr.io/cosmoscontracts/juno:$IMAGE_TAG /opt/setup_and_run.sh $KEY_ADDR    
-}
-
-function compile_and_copy {    
-    # compile vaults contract here
-    docker run --rm -v "$(pwd)":/code \
-      --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
-      --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
-      cosmwasm/rust-optimizer:0.12.11
-
-    # copy wasm to docker container
-    docker cp ./artifacts/. $CONTAINER_NAME:/
-}
-
-function health_status {
-    # validator addr
-    VALIDATOR_ADDR=$($BINARY keys show validator --address) && echo "Validator address: $VALIDATOR_ADDR"
-
-    BALANCE_1=$($BINARY q bank balances $VALIDATOR_ADDR) && echo "Pre-store balance: $BALANCE_1"
-
-    echo "Address to deploy contracts: $KEY_ADDR"
-    echo "JUNOD_COMMAND_ARGS: $JUNOD_COMMAND_ARGS"
-}
-
 function create_denom {
     RANDOM_STRING=$(cat /dev/urandom | tr -dc 'a-zA-Z' | fold -w 6 | head -n 1)
 
@@ -94,7 +44,7 @@ function upload_testing_contract {
     export TEST_CONTRACT=$($BINARY query tx $TX_HASH --output json | jq -r '.logs[0].events[0].attributes[0].value') && echo "TEST_CONTRACT: $TEST_CONTRACT"
 }
 
-function upload_middlware {
+function upload_tokenfactory_core {
     echo "Storing contract..."
     create_denom
     UPLOAD=$($BINARY tx wasm store /tokenfactory_core.wasm $JUNOD_COMMAND_ARGS | jq -r '.txhash') && echo $UPLOAD
@@ -113,24 +63,6 @@ function upload_middlware {
     $BINARY q tokenfactory denom-authority-metadata $FULL_DENOM # admin is the TF_CONTRACT
 }
 
-
-function add_accounts {
-    # provision juno default user i.e. juno1hj5fveer5cjtn4wd6wstzugjfdxzl0xps73ftl
-    echo "decorate bright ozone fork gallery riot bus exhaust worth way bone indoor calm squirrel merry zero scheme cotton until shop any excess stage laundry" | $BINARY keys add test-user --recover --keyring-backend test
-    # juno1efd63aw40lxf3n4mhf7dzhjkr453axurv2zdzk
-    echo "wealth flavor believe regret funny network recall kiss grape useless pepper cram hint member few certain unveil rather brick bargain curious require crowd raise" | $BINARY keys add other-user --recover --keyring-backend test
-    # juno16g2rahf5846rxzp3fwlswy08fz8ccuwk03k57y
-    echo "clip hire initial neck maid actor venue client foam budget lock catalog sweet steak waste crater broccoli pipe steak sister coyote moment obvious choose" | $BINARY keys add user3 --recover --keyring-backend test
-
-    # send some 10 junox funds to the users
-    $BINARY tx bank send test-user juno1efd63aw40lxf3n4mhf7dzhjkr453axurv2zdzk 10000000ujunox $JUNOD_COMMAND_ARGS
-    $BINARY tx bank send test-user juno16g2rahf5846rxzp3fwlswy08fz8ccuwk03k57y 100000ujunox $JUNOD_COMMAND_ARGS
-
-    # check funds where sent
-    # other_balance=$($BINARY q bank balances juno1efd63aw40lxf3n4mhf7dzhjkr453axurv2zdzk --output json)
-    # ASSERT_EQUAL "$other_balance" '{"balances":[{"denom":"ujunox","amount":"10000000"}],"pagination":{"next_key":null,"total":"0"}}'
-}
-
 # === COPY ALL ABOVE TO SET ENVIROMENT UP LOCALLY ====
 
 
@@ -144,31 +76,34 @@ add_accounts
 compile_and_copy # the compile takes time for the docker container to start up
 
 sleep 5
-# add query here until state check is good, then continue
-
-# Don't allow errors after this point
-# set -e
-
 health_status
 
 
-# new stuff
-
-# create a denom
+# upload test contract
 upload_testing_contract
-upload_middlware # TF_CONTRACT=juno1
+upload_tokenfactory_core # TF_CONTRACT=juno1
 
 
 # == INITIAL TEST ==
-# info=$(query_contract $TF_CONTRACT '{"contract_info":{}}' | jq -r '.data') && echo $info
 
-# start
-# MINT SOME TOKENS from the 2nd contract through middleware
+
+# MINTS TOKENS FROM THE CORE CONTRACT (TF_CONTRACT) VIA THE TEST CONTRACT (TEST_CONTRACT)
 PAYLOAD=$(printf '{"mint_tokens":{"core_factory_address":"%s","to_address":"%s","denoms":[{"denom":"%s","amount":"2"}]}}' $TF_CONTRACT $KEY_ADDR $FULL_DENOM) && echo $PAYLOAD
 wasm_cmd $TEST_CONTRACT "$PAYLOAD" "" show_log
 $BINARY q bank balances $KEY_ADDR --output json
 
+# TODO: only allow denoms which the contract is the admin of? (query denom-authority-metadata)
 
+
+# UPDATE WHITELIST ON MAIN CORE (if not in, adds. If already in, removes via the same message)
+PAYLOAD=$(printf '{"add_whitelist":{"addresses":["%s"]}}' $KEY_ADDR) && echo $PAYLOAD
+wasm_cmd $TF_CONTRACT "$PAYLOAD" "" show_log
+query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data'
+# ensure this address can now mint tokens through the contract
+
+PAYLOAD=$(printf '{"remove_whitelist":{"addresses":["%s"]}}' $KEY_ADDR) && echo $PAYLOAD
+wasm_cmd $TF_CONTRACT "$PAYLOAD" "" show_log
+query_contract $TF_CONTRACT '{"get_config":{}}' | jq -r '.data'
 
 
 
