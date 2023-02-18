@@ -8,9 +8,6 @@ use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Config, STATE};
 
-#[cfg(feature = "use-tf-example")]
-use self::{execute, instantiate, query};
-
 use tokenfactory_types::msg::ExecuteMsg::Mint;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -21,7 +18,8 @@ pub fn instantiate(
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     // if msg.core_factory_address is some
-    let mut config;
+
+    let config;
     if msg.core_factory_address.is_some() {
         let core_addr = deps.api.addr_validate(&msg.core_factory_address.unwrap())?;
         config = Config {

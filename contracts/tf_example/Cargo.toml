@@ -51,7 +51,8 @@ thiserror = "1.0"
 
 # tokenfactory_core = { path = "../tokenfactory_core" }
 
-tokenfactory-types = { path = "../../packages/tokenfactory-types" }
+# tokenfactory-types = { path = "../../packages/tokenfactory-types" }
+tokenfactory-types = { git = "https://github.com/Reecepbcups/tokenfactory-core-contract" }
 
 # [dev-dependencies]
 # cw-multi-test = "0.16.1"
