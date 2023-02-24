@@ -9,7 +9,7 @@
 # -> query_contract, wasm_cmd, mint_cw721, send_nft_to_listing, send_cw20_to_listing
 source ./e2e/helpers.sh
 
-CONTAINER_NAME="tokenfactory_bindings_test"
+CONTAINER_NAME="tokenfactory_middleware_core"
 BINARY="docker exec -i $CONTAINER_NAME junod"
 DENOM='ujunox'
 JUNOD_CHAIN_ID='testing'

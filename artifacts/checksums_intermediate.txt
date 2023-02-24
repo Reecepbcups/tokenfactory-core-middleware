@@ -1,2 +1,2 @@
 bd9eddee0a402f80fb1aeb299e989caf8d41093d6d323972a6244ae9c4dba1d2  ./target/wasm32-unknown-unknown/release/tf_example.wasm
-428ec6b661a2d32f9af8f15fd70a61b9557c50c8269826456d20bc333ce2119a  ./target/wasm32-unknown-unknown/release/tokenfactory_core.wasm
+04bc7058a17f3cd78bc03e934d3d9acaf316a10fa1c3b9f2b7c27fffe16b6437  ./target/wasm32-unknown-unknown/release/tokenfactory_core.wasm

@@ -6,7 +6,9 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::helpers::{is_contract_manager, is_whitelisted};
+use crate::helpers::{
+    is_contract_manager, is_whitelisted, mint_factory_token_messages, pretty_denoms_output,
+};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Config, STATE};
 
@@ -188,36 +190,13 @@ pub fn execute_mint(
 
     is_whitelisted(state.clone(), info.sender)?;
 
-    if denoms.is_empty() {
-        return Err(ContractError::InvalidDenom {
-            denom: "denoms".to_string(),
-            message: "denoms cannot be empty on mint".to_string(),
-        });
-    }
-
-    // create the send messages
-    let msgs: Vec<TokenMsg> = denoms
-        .iter()
-        .filter(|d| denoms.iter().any(|d2| d2.denom == d.denom))
-        .map(|d| TokenMsg::MintTokens {
-            denom: d.denom.clone(),
-            amount: d.amount,
-            mint_to_address: address.to_string(),
-        })
-        .collect();
-
-    // get all full_denom & amounts as a string in the format [{full_denom: amount}, ], ex: [{uusd: 1000000}, {ujuno: 1000000}]
-    let output = denoms
-        .iter()
-        .map(|d| format!("{{{}: {}}}", d.denom, d.amount))
-        .collect::<Vec<String>>()
-        .join(", ");
+    let mint_msgs: Vec<TokenMsg> = mint_factory_token_messages(&address, &denoms)?;
 
     Ok(Response::new()
         .add_attribute("method", "execute_mint")
         .add_attribute("to_address", address)
-        .add_attribute("denoms", output)
-        .add_messages(msgs))
+        .add_attribute("denoms", pretty_denoms_output(&denoms))
+        .add_messages(mint_msgs))
 }
 
 pub fn execute_burn(
