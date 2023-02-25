@@ -1,3 +1,6 @@
+# REPO MOVED TO
+<https://github.com/CosmosContracts/tokenfactory-contracts>
+
 # TokenFactory Core (middleware)
 
 This is a contract to which you give the admin of your token denomination from the TokenFactory module. It then allows other contracts you control to mint tokens on this contract's behalf via a WasmMsg.
